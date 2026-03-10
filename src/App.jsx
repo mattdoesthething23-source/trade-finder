@@ -167,36 +167,7 @@ export default function App() {
   const [notes, setNotes] = useState("");
   const [aiResult, setAiResult] = useState(null);
 
- async function scanMarket() {
-  try {
-    setLoadingScanner(true);
-    setScannerError("");
-    setMarketStocks([]);
-
-    const response = await fetch(
-      "https://financialmodelingprep.com/api/v3/stock_market/actives?apikey=demo"
-    );
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (!Array.isArray(data) || data.length === 0) {
-      throw new Error("No stock data returned");
-    }
-
-    const filtered = data.slice(0, 12);
-    setMarketStocks(filtered);
-  } catch (err) {
-    console.error(err);
-    setScannerError(err.message || "Scanner failed");
-  } finally {
-    setLoadingScanner(false);
-  }
-}
-   const [savedTrades, setSavedTrades] = useState(() => {
+  const [savedTrades, setSavedTrades] = useState(() => {
     const saved = localStorage.getItem("tradeFinderSavedTrades");
     if (saved) {
       try {
@@ -208,64 +179,7 @@ export default function App() {
         }));
       }
     }
-<section className="card top-picks-card">
-  <div className="saved-header">
-    <h2>Strategy Picks</h2>
-    <span>{marketMode.toUpperCase()} MODE</span>
-  </div>
 
-  {strategyTrades.length === 0 ? (
-    <div className="empty-state">
-      No trades match the strategy yet.
-    </div>
-  ) : (
-    <div className="saved-grid">
-      {strategyTrades.map((trade) => (
-        <div key={trade.id} className="trade-card top-pick">
-          <div className="trade-top">
-            <div>
-              <h3>
-                {trade.ticker} {trade.direction.toUpperCase()}
-              </h3>
-              <p>
-                Strike ${trade.strike.toFixed(2)} • Premium $
-                {trade.premium.toFixed(2)}
-              </p>
-            </div>
-
-            <div className="score-chip">{trade.score}</div>
-          </div>
-
-          <div className="mini-grid">
-            <div>
-              <span>Cost</span>
-              <strong>${trade.cost.toFixed(2)}</strong>
-            </div>
-
-            <div>
-              <span>DTE</span>
-              <strong>{trade.dte}</strong>
-            </div>
-
-            <div>
-              <span>Move</span>
-              <strong>{trade.moveNeededPct.toFixed(2)}%</strong>
-            </div>
-
-            <div>
-              <span>Risk</span>
-              <strong>{trade.riskTag}</strong>
-            </div>
-          </div>
-
-          <div className="trade-footer">
-            <span className="rating-pill small">{trade.rating}</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  )}
-</section>
     return starterTrades.map((trade) => ({
       ...trade,
       ...analyzeTrade(trade),
@@ -294,12 +208,39 @@ export default function App() {
       relVol,
     });
   }, [direction, stock, strike, prem, dte, volume, relVol]);
+
   useEffect(() => {
-    localStorage.setItem(
-      "tradeFinderSavedTrades",
-      JSON.stringify(savedTrades)
-    );
+    localStorage.setItem("tradeFinderSavedTrades", JSON.stringify(savedTrades));
   }, [savedTrades]);
+
+  async function scanMarket() {
+    try {
+      setLoadingScanner(true);
+      setScannerError("");
+      setMarketStocks([]);
+
+      const response = await fetch(
+        "https://financialmodelingprep.com/api/v3/stock_market/actives?apikey=demo"
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!Array.isArray(data) || data.length === 0) {
+        throw new Error("No stock data returned");
+      }
+
+      setMarketStocks(data.slice(0, 12));
+    } catch (err) {
+      console.error(err);
+      setScannerError(err.message || "Scanner failed");
+    } finally {
+      setLoadingScanner(false);
+    }
+  }
 
   function clearInputs() {
     setTicker("");
@@ -365,7 +306,8 @@ export default function App() {
         const trade = {
           id: Date.now() + index,
           ticker: rawTicker.trim().toUpperCase(),
-          direction: rawDirection.trim().toLowerCase() === "put" ? "put" : "call",
+          direction:
+            rawDirection.trim().toLowerCase() === "put" ? "put" : "call",
           stock: parseFloat(rawStock) || 0,
           strike: parseFloat(rawStrike) || 0,
           premium: parseFloat(rawPremium) || 0,
@@ -436,21 +378,17 @@ export default function App() {
   const scannerTop = scannerTrades.slice(0, 6);
 
   const calls = scannerTrades.filter((t) => t.direction === "call");
-const puts = scannerTrades.filter((t) => t.direction === "put");
+  const puts = scannerTrades.filter((t) => t.direction === "put");
 
-let strategyTrades = [];
+  let strategyTrades = [];
+  if (marketMode === "bullish") {
+    strategyTrades = [...calls.slice(0, 2), ...puts.slice(0, 1)];
+  } else if (marketMode === "bearish") {
+    strategyTrades = [...puts.slice(0, 2), ...calls.slice(0, 1)];
+  } else {
+    strategyTrades = scannerTrades.slice(0, 3);
+  }
 
-if (marketMode === "bullish") {
-  strategyTrades = [...calls.slice(0, 2), ...puts.slice(0, 1)];
-}
-
-if (marketMode === "bearish") {
-  strategyTrades = [...puts.slice(0, 2), ...calls.slice(0, 1)];
-}
-
-if (marketMode === "mixed") {
-  strategyTrades = scannerTrades.slice(0, 3);
-}
   return (
     <div className="app-shell">
       <div className="container">
@@ -528,12 +466,17 @@ if (marketMode === "mixed") {
             <h2>Decision Dashboard</h2>
             <span>Best directional picks</span>
           </div>
+          <div className="saved-grid">
+            <DecisionCard title="Best Call" trade={bestCall} />
+            <DecisionCard title="Best Put" trade={bestPut} />
+            <DecisionCard title="Best Cheap Trade" trade={bestCheap} />
+          </div>
+        </section>
+
         <section className="card top-picks-card">
           <div className="saved-header">
             <h2>Cheap Options Scanner</h2>
-            <span>
-              {scannerMode === "strict" ? "Strict mode" : "Loose mode"}
-            </span>
+            <span>{scannerMode === "strict" ? "Strict mode" : "Loose mode"}</span>
           </div>
 
           <div className="button-row" style={{ marginTop: 0, marginBottom: 16 }}>
@@ -550,28 +493,30 @@ if (marketMode === "mixed") {
               Loose
             </button>
           </div>
-<div className="button-row" style={{ marginBottom: 16 }}>
-  <button
-    className={marketMode === "bullish" ? "primary" : "secondary"}
-    onClick={() => setMarketMode("bullish")}
-  >
-    Bullish Week
-  </button>
 
-  <button
-    className={marketMode === "bearish" ? "primary" : "secondary"}
-    onClick={() => setMarketMode("bearish")}
-  >
-    Bearish Week
-  </button>
+          <div className="button-row" style={{ marginBottom: 16 }}>
+            <button
+              className={marketMode === "bullish" ? "primary" : "secondary"}
+              onClick={() => setMarketMode("bullish")}
+            >
+              Bullish Week
+            </button>
 
-  <button
-    className={marketMode === "mixed" ? "primary" : "secondary"}
-    onClick={() => setMarketMode("mixed")}
-  >
-    Mixed Market
-  </button>
-</div>
+            <button
+              className={marketMode === "bearish" ? "primary" : "secondary"}
+              onClick={() => setMarketMode("bearish")}
+            >
+              Bearish Week
+            </button>
+
+            <button
+              className={marketMode === "mixed" ? "primary" : "secondary"}
+              onClick={() => setMarketMode("mixed")}
+            >
+              Mixed Market
+            </button>
+          </div>
+
           <p className="import-help">
             Strict = your real system. Loose = wider net for idea generation.
           </p>
@@ -621,22 +566,68 @@ if (marketMode === "mixed") {
                   </div>
 
                   {trade.notes ? <p className="trade-notes">{trade.notes}</p> : null}
-
                   {trade.hardFail ? (
-                    <div className="fail-box">
-                      {trade.failReasons.join(" • ")}
-                    </div>
+                    <div className="fail-box">{trade.failReasons.join(" • ")}</div>
                   ) : null}
                 </div>
               ))}
             </div>
           )}
         </section>
-          <div className="saved-grid">
-            <DecisionCard title="Best Call" trade={bestCall} />
-            <DecisionCard title="Best Put" trade={bestPut} />
-            <DecisionCard title="Best Cheap Trade" trade={bestCheap} />
+
+        <section className="card top-picks-card">
+          <div className="saved-header">
+            <h2>Strategy Picks</h2>
+            <span>{marketMode.toUpperCase()} MODE</span>
           </div>
+
+          {strategyTrades.length === 0 ? (
+            <div className="empty-state">No trades match the strategy yet.</div>
+          ) : (
+            <div className="saved-grid">
+              {strategyTrades.map((trade) => (
+                <div key={trade.id} className="trade-card top-pick">
+                  <div className="trade-top">
+                    <div>
+                      <h3>
+                        {trade.ticker} {trade.direction.toUpperCase()}
+                      </h3>
+                      <p>
+                        Strike ${trade.strike.toFixed(2)} • Premium $
+                        {trade.premium.toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="score-chip">{trade.score}</div>
+                  </div>
+
+                  <div className="mini-grid">
+                    <div>
+                      <span>Cost</span>
+                      <strong>${trade.cost.toFixed(2)}</strong>
+                    </div>
+                    <div>
+                      <span>DTE</span>
+                      <strong>{trade.dte}</strong>
+                    </div>
+                    <div>
+                      <span>Move</span>
+                      <strong>{trade.moveNeededPct.toFixed(2)}%</strong>
+                    </div>
+                    <div>
+                      <span>Risk</span>
+                      <strong>{trade.riskTag}</strong>
+                    </div>
+                  </div>
+
+                  <div className="trade-footer">
+                    <span className="rating-pill small">{trade.rating}</span>
+                  </div>
+
+                  {trade.notes ? <p className="trade-notes">{trade.notes}</p> : null}
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="grid two-col">
@@ -646,12 +637,19 @@ if (marketMode === "mixed") {
             <div className="form-grid">
               <label>
                 <span>Ticker</span>
-                <input value={ticker} onChange={(e) => setTicker(e.target.value)} placeholder="LCID" />
+                <input
+                  value={ticker}
+                  onChange={(e) => setTicker(e.target.value)}
+                  placeholder="LCID"
+                />
               </label>
 
               <label>
                 <span>Direction</span>
-                <select value={direction} onChange={(e) => setDirection(e.target.value)}>
+                <select
+                  value={direction}
+                  onChange={(e) => setDirection(e.target.value)}
+                >
                   <option value="call">Call</option>
                   <option value="put">Put</option>
                 </select>
@@ -659,43 +657,85 @@ if (marketMode === "mixed") {
 
               <label>
                 <span>Stock price</span>
-                <input type="number" step="0.01" value={stockPrice} onChange={(e) => setStockPrice(e.target.value)} placeholder="3.35" />
+                <input
+                  type="number"
+                  step="0.01"
+                  value={stockPrice}
+                  onChange={(e) => setStockPrice(e.target.value)}
+                  placeholder="3.35"
+                />
               </label>
 
               <label>
                 <span>Strike price</span>
-                <input type="number" step="0.01" value={strikePrice} onChange={(e) => setStrikePrice(e.target.value)} placeholder="5.00" />
+                <input
+                  type="number"
+                  step="0.01"
+                  value={strikePrice}
+                  onChange={(e) => setStrikePrice(e.target.value)}
+                  placeholder="5.00"
+                />
               </label>
 
               <label>
                 <span>Premium</span>
-                <input type="number" step="0.01" value={premium} onChange={(e) => setPremium(e.target.value)} placeholder="0.05" />
+                <input
+                  type="number"
+                  step="0.01"
+                  value={premium}
+                  onChange={(e) => setPremium(e.target.value)}
+                  placeholder="0.05"
+                />
               </label>
 
               <label>
                 <span>Days to expiration</span>
-                <input type="number" value={daysToExpiration} onChange={(e) => setDaysToExpiration(e.target.value)} placeholder="60" />
+                <input
+                  type="number"
+                  value={daysToExpiration}
+                  onChange={(e) => setDaysToExpiration(e.target.value)}
+                  placeholder="60"
+                />
               </label>
 
               <label>
                 <span>Today volume</span>
-                <input type="number" value={todayVolume} onChange={(e) => setTodayVolume(e.target.value)} placeholder="5000000" />
+                <input
+                  type="number"
+                  value={todayVolume}
+                  onChange={(e) => setTodayVolume(e.target.value)}
+                  placeholder="5000000"
+                />
               </label>
 
               <label>
                 <span>Relative volume</span>
-                <input type="number" step="0.1" value={relativeVolume} onChange={(e) => setRelativeVolume(e.target.value)} placeholder="2.0" />
+                <input
+                  type="number"
+                  step="0.1"
+                  value={relativeVolume}
+                  onChange={(e) => setRelativeVolume(e.target.value)}
+                  placeholder="2.0"
+                />
               </label>
             </div>
 
             <label className="notes-box">
               <span>Notes / catalyst</span>
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Earnings, sympathy move, crypto run, oversold bounce..." />
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Earnings, sympathy move, crypto run, oversold bounce..."
+              />
             </label>
 
             <div className="button-row">
-              <button className="primary" onClick={saveTrade}>Save trade</button>
-              <button className="secondary" onClick={clearInputs}>Clear</button>
+              <button className="primary" onClick={saveTrade}>
+                Save trade
+              </button>
+              <button className="secondary" onClick={clearInputs}>
+                Clear
+              </button>
             </div>
           </div>
 
@@ -730,7 +770,10 @@ if (marketMode === "mixed") {
                 <div className="rating-pill">{analysis.rating}</div>
               </div>
               <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${analysis.score}%` }} />
+                <div
+                  className="progress-fill"
+                  style={{ width: `${analysis.score}%` }}
+                />
               </div>
             </div>
 
@@ -748,72 +791,82 @@ if (marketMode === "mixed") {
 
         <section className="card">
           <div className="saved-header">
+            <h2>Market Scanner</h2>
+            <span>High activity stocks</span>
+          </div>
+
+          {scannerError ? (
+            <div className="fail-box" style={{ marginBottom: 16 }}>
+              Scanner error: {scannerError}
+            </div>
+          ) : null}
+
+          <div className="button-row" style={{ marginBottom: 16 }}>
+            <button className="primary" onClick={scanMarket}>
+              Scan Market
+            </button>
+          </div>
+
+          {loadingScanner ? (
+            <div className="empty-state">Scanning market...</div>
+          ) : marketStocks.length === 0 ? (
+            <div className="empty-state">
+              Click "Scan Market" to find active stocks.
+            </div>
+          ) : (
+            <div className="saved-grid">
+              {marketStocks.map((stock) => (
+                <div key={stock.symbol} className="trade-card">
+                  <div className="trade-top">
+                    <div>
+                      <h3>{stock.symbol}</h3>
+                      <p>${stock.price?.toFixed(2)}</p>
+                    </div>
+
+                    <div className="score-chip">
+                      {stock.changesPercentage?.toFixed(1)}%
+                    </div>
+                  </div>
+
+                  <div className="mini-grid">
+                    <div>
+                      <span>Volume</span>
+                      <strong>{stock.volume?.toLocaleString()}</strong>
+                    </div>
+
+                    <div>
+                      <span>Change</span>
+                      <strong>{stock.change?.toFixed(2)}</strong>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="card">
+          <div className="saved-header">
             <h2>Watchlist Import</h2>
             <span>One line per trade</span>
           </div>
-<section className="card">
-  <div className="saved-header">
-    <h2>Market Scanner</h2>
-    <span>High activity stocks</span>
-  </div>
-{scannerError ? (
-  <div className="fail-box" style={{ marginBottom: 16 }}>
-    Scanner error: {scannerError}
-  </div>
-) : null}
-  <div className="button-row" style={{ marginBottom: 16 }}>
-    <button className="primary" onClick={scanMarket}>
-      Scan Market
-    </button>
-  </div>
 
-  {loadingScanner ? (
-    <div className="empty-state">Scanning market...</div>
-  ) : marketStocks.length === 0 ? (
-    <div className="empty-state">
-      Click "Scan Market" to find active stocks.
-    </div>
-  ) : (
-    <div className="saved-grid">
-      {marketStocks.map((stock) => (
-        <div key={stock.symbol} className="trade-card">
-          <div className="trade-top">
-            <div>
-              <h3>{stock.symbol}</h3>
-              <p>${stock.price?.toFixed(2)}</p>
-            </div>
-
-            <div className="score-chip">
-              {stock.changesPercentage?.toFixed(1)}%
-            </div>
-          </div>
-
-          <div className="mini-grid">
-            <div>
-              <span>Volume</span>
-              <strong>{stock.volume?.toLocaleString()}</strong>
-            </div>
-
-            <div>
-              <span>Change</span>
-              <strong>{stock.change?.toFixed(2)}</strong>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  )}
-</section>
           <p className="import-help">
             Format:
             <br />
             TICKER,direction,stock,strike,premium,dte,volume,relVol,notes
           </p>
 
-          <textarea className="bulk-box" value={bulkText} onChange={(e) => setBulkText(e.target.value)} />
+          <textarea
+            className="bulk-box"
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+          />
 
           <div className="button-row">
-            <button className="primary" onClick={importBulkTrades}>Import watchlist</button>
+            <button className="primary" onClick={importBulkTrades}>
+              Import watchlist
+            </button>
           </div>
         </section>
 
@@ -824,23 +877,24 @@ if (marketMode === "mixed") {
           </div>
 
           <div className="button-row" style={{ marginTop: 0, marginBottom: 16 }}>
-  <button className="primary" onClick={rankWithAI}>
-    Rank Trades With AI
-  </button>
-  <button
-    className="secondary"
-    onClick={() => {
-      localStorage.removeItem("tradeFinderSavedTrades");
-      setSavedTrades([]);
-    }}
-  >
-    Clear Saved Trades
-  </button>
-</div>
+            <button className="primary" onClick={rankWithAI}>
+              Rank Trades With AI
+            </button>
+            <button
+              className="secondary"
+              onClick={() => {
+                localStorage.removeItem("tradeFinderSavedTrades");
+                setSavedTrades([]);
+              }}
+            >
+              Clear Saved Trades
+            </button>
+          </div>
 
           {savedTrades.length === 0 ? (
             <div className="empty-state">
-              No saved trades yet. Add a few contracts from Robinhood and compare them here.
+              No saved trades yet. Add a few contracts from Robinhood and compare
+              them here.
             </div>
           ) : (
             <div className="saved-grid">
@@ -880,7 +934,10 @@ if (marketMode === "mixed") {
 
                   <div className="trade-footer">
                     <span className="rating-pill small">{trade.rating}</span>
-                    <button className="danger" onClick={() => deleteTrade(trade.id)}>
+                    <button
+                      className="danger"
+                      onClick={() => deleteTrade(trade.id)}
+                    >
                       Delete
                     </button>
                   </div>
@@ -905,4 +962,3 @@ if (marketMode === "mixed") {
     </div>
   );
 }
-// deploy test
